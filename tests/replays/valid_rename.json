@@ -1,0 +1,3 @@
+{"response": "{\"method_renames\": {\"alltrue\": \"all\", \"product\": \"prod\"}}",
+ "expect": "ok",
+ "method_renames": {"alltrue": "all", "product": "prod"}}
