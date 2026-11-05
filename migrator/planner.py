@@ -38,6 +38,7 @@ class MigrationContext:
     to_version: str
     guide_text: str
     usages: list[str]  # rendered affected call sites
+    client_sources: dict[str, str] = None  # relpath -> source
 
 
 class RulePlanner:
@@ -110,9 +111,28 @@ class ModelPlanner:
         # explicit, separately-approved step.
         self.client = client
 
-    def propose(self, context: MigrationContext) -> Rules:
+    def _prompt(self, context: MigrationContext,
+                failures: list[str] | None = None) -> str:
         prompt = _PROMPT_TEMPLATE.format(
             library=context.library, from_version=context.from_version,
             to_version=context.to_version, guide_text=context.guide_text,
             usages="\n".join(context.usages) or "(none)")
-        return validate_proposal(self.client(prompt))
+        if context.client_sources:
+            prompt += "\n\nClient sources:\n" + "\n".join(
+                f"--- {p} ---\n{s}" for p, s
+                in sorted(context.client_sources.items()))
+        if failures:
+            prompt += ("\n\nPrevious proposal(s) failed evaluation. "
+                       "Failures:\n" + "\n".join(failures)
+                       + "\nPropose corrected rules.")
+        return prompt
+
+    def propose(self, context: MigrationContext) -> Rules:
+        return validate_proposal(self.client(self._prompt(context)))
+
+    def revise(self, context: MigrationContext,
+               failures: list[str]) -> Rules:
+        """Retry with evaluation feedback. Callers bound the count;
+        each call is another (reserved, billed) model request."""
+        return validate_proposal(
+            self.client(self._prompt(context, failures)))

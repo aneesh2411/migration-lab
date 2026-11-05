@@ -112,13 +112,43 @@ Current cases:
 
 ## Planners
 
-`migrator/planner.py` defines the planner interface. `RulePlanner` is
-the deterministic baseline used everywhere today. `ModelPlanner`
-accepts an injected model client (a plain `prompt -> text` callable)
-and validates every proposal strictly - malformed JSON, unknown keys,
-malformed names, and empty proposals are rejected and escalate rather
-than being applied; sandbox evaluation remains the authority on
-whether any proposal actually works. Tests replay recorded model
-responses from `tests/replays/`; there are no live model calls, no
-stored credentials, and no network in this repo - wiring a real model
-client is a separate, explicitly approved step.
+`migrator/planner.py` defines the planner interface. `RulePlanner`
+is the deterministic baseline and the default everywhere. Passing a
+`ModelPlanner` to `migrate()` enables a bounded
+propose -> check -> revise -> escalate loop: the model proposes rules,
+the same sandbox evaluation checks them, failures are fed back for a
+bounded number of revisions, and if no proposal passes, the run
+escalates with the full failure history. Every proposal is validated
+strictly (malformed JSON, unknown keys, malformed names, empty
+proposals are rejected and counted as failures); sandbox evaluation
+remains the authority on whether any proposal actually works.
+
+`migrator/budget.py` enforces pre-call spend limits and fails
+closed:
+
+- Worst-case cost is RESERVED before each call: input tokens bounded
+  by the prompt's UTF-8 byte length (sound for byte-level BPE
+  tokenizers - every token covers at least one byte, so Unicode- or
+  code-dense prompts cannot exceed it) plus `max_output_tokens` and a
+  per-request overhead, at the higher of the input/output rates, with
+  a safety multiplier. Models whose tokenizer does not satisfy that
+  property are refused, as is non-text input. `max_output_tokens`
+  alone is never treated as a cost bound.
+- The cumulative total is persisted in a state file guarded by an
+  OS-level advisory lock (`flock`) around every load-modify-store, so
+  concurrent processes cannot lose each other's spend; the write
+  itself is atomic (temp file + rename). Corrupt or unreadable state
+  fails closed by treating the ceiling as fully spent.
+- Unknown pricing, a missing ceiling, or an exhausted budget refuse
+  the call BEFORE it happens - so retries cannot overrun: each one
+  needs its own reservation. A call whose client raises keeps its full
+  worst-case reservation, since it may still have been billed.
+
+Provider-side caps are a backstop, not the boundary: enforcement
+there is documented as not instantaneous. The reservation above is the
+primary bound.
+
+Tests replay scripted/recorded model responses (tests/replays and the
+loop tests) and exercise the budget wrapper offline; there are no live
+model calls, no stored credentials, and no network in this repo -
+wiring a real model client is a separate, explicitly approved step.
