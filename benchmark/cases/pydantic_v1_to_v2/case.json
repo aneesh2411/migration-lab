@@ -1,0 +1,8 @@
+{
+  "expected_verdict": "consistent evidence",
+  "breaks_unpatched": false,
+  "output_contract": {
+    "allow_serialization_formatting": true
+  },
+  "notes": "client consumers parse the JSON output, so formatting-only changes are acceptable under this contract"
+}
