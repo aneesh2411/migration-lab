@@ -1,0 +1,13 @@
+{
+  "library": "pydantic",
+  "from": "1.10.13",
+  "to": "2.*",
+  "guide_url": "https://docs.pydantic.dev/latest/migration/",
+  "method_renames": {
+    "dict": "model_dump",
+    "json": "model_dump_json",
+    "parse_obj": "model_validate"
+  },
+  "expected_verdict": "behavior changed",
+  "notes": " distilled from the official migration guide: BaseModel.dict/json/parse_obj removed in v2"
+}
