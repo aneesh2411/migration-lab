@@ -8,11 +8,20 @@ Design rules (fail closed everywhere):
   length cannot silently overrun: each one needs its own reservation.
 - Input tokens are bounded, not guessed: for byte-level BPE
   tokenizers every token encodes at least one input byte, so the
-  UTF-8 byte length of the prompt is a sound upper bound on its token
-  count (Unicode/code dense text cannot exceed it). Models whose
-  tokenizer is not known to satisfy that property are refused, as is
-  non-text input. max_output_tokens alone is never treated as a cost
-  bound; it is only one reservation term.
+  UTF-8 byte length of the prompt is a sound upper bound on the
+  CONTENT tokens of the text we send (Unicode/code dense text cannot
+  exceed it). Models whose tokenizer is not known to satisfy that
+  property are refused, as is non-text input. max_output_tokens alone
+  is never treated as a cost bound; it is only one reservation term.
+
+Scope of the bound, honestly: it covers the request content this
+process constructs. It cannot cover tokens a provider adds (system
+wrappers, tool schemas, serialization), mid-flight provider price
+changes, or billing adjustments - the +overhead constant is a partial
+allowance, not full coverage, so this is a conservative control on our
+own requests, NOT a strict guarantee on billed cost. Exact billed
+accounting requires the provider's returned usage fields, reconciled
+in settle() once a live client exists.
 - The cumulative total lives in a state file guarded by an OS-level
   advisory lock (fcntl.flock) around every load-modify-store, so
   concurrent processes cannot lose each other's spend; the write
@@ -42,11 +51,15 @@ class Pricing:
 
 
 _SAFETY = 1.25
-_REQUEST_OVERHEAD = 32  # framing/message tokens, conservative
+_REQUEST_OVERHEAD = 32  # partial allowance for request framing only;
+# NOT coverage for provider-added tokens - see module docstring
 
 
 def token_bound(text: str, tokenizer: str) -> int:
-    """Sound upper bound on input tokens, or refuse (fail closed)."""
+    """Upper bound on the CONTENT tokens of this exact text, for
+    tokenizer families with a verified byte-level property; refuses
+    (fails closed) otherwise. Does not account for provider-added
+    tokens outside this text."""
     if not isinstance(text, str):
         raise BudgetExceeded("cannot bound tokens for non-text input")
     if tokenizer != "byte-bpe":
