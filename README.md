@@ -130,10 +130,16 @@ closed:
   by the prompt's UTF-8 byte length (sound for byte-level BPE
   tokenizers - every token covers at least one byte, so Unicode- or
   code-dense prompts cannot exceed it) plus `max_output_tokens` and a
-  per-request overhead, at the higher of the input/output rates, with
-  a safety multiplier. Models whose tokenizer does not satisfy that
-  property are refused, as is non-text input. `max_output_tokens`
-  alone is never treated as a cost bound.
+  per-request framing allowance, at the higher of the input/output
+  rates, with a safety multiplier. Models whose tokenizer does not
+  satisfy that property are refused, as is non-text input.
+  `max_output_tokens` alone is never treated as a cost bound. Scope:
+  this bounds the request content this process constructs. It cannot
+  bound provider-added tokens (system wrappers, tool schemas,
+  serialization) or provider price changes, so it is a conservative
+  control on our own requests, not a strict guarantee on billed cost -
+  exact accounting requires the provider's usage fields, reconciled in
+  `settle()` once a live client exists.
 - The cumulative total is persisted in a state file guarded by an
   OS-level advisory lock (`flock`) around every load-modify-store, so
   concurrent processes cannot lose each other's spend; the write
