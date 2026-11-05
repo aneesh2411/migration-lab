@@ -64,16 +64,32 @@ what tests miss.
 
 ## Benchmark
 
-`benchmark/cases/` holds real-library upgrade cases: each pins actual
-published versions (installed from PyPI into throwaway venvs), a small
-client package written against the old API, rules distilled from the
-library's official migration guide, and the expected verdict. The
-first case, pydantic v1 -> v2, shows the evaluator working on a real
-library: the rule engine applies the `dict`/`json`/`parse_obj`
-renames, the client's unit tests pass on v2 - and the behavior
-snapshot still catches that v2's `model_dump_json` drops insignificant
-whitespace, so the run ends in "behavior changed - human review"
-rather than a false green. That is the intended demonstration:
-verification beyond tests.
+`benchmark/cases/` holds real-library upgrade cases. Each case pins
+exact published versions on both sides (installed from PyPI into
+throwaway venvs), a small client package written against the old API,
+rules distilled from the library's official migration guide (with the
+guide URL, retrieval date, and the quoted table row behind every rule
+recorded in `rules.json`), and the expected verdict.
+
+Not every byte difference is a regression: the evaluator classifies
+snapshot differences as cosmetic (same JSON value with different
+serialization formatting, whitespace-only changes) or substantive
+(real value changes). Cosmetic differences are reported in the run
+report but still yield "consistent evidence"; only substantive
+differences escalate to "behavior changed - human review".
+
+Current cases:
+
+- **pydantic 1.10.13 -> 2.14.2** - the rule engine applies the
+  `dict`/`json`/`parse_obj` renames from the official migration guide;
+  unit tests pass on v2, and the only snapshot difference is v2's
+  `model_dump_json` dropping insignificant whitespace, reported as a
+  cosmetic difference rather than a false alarm.
+- **numpy 1.26.4 -> 2.2.6** - `np.alltrue` and `np.product` were
+  removed in NumPy 2.0 (verified: both raise `AttributeError` on
+  2.2.6 unpatched), so this case breaks for real without a patch; the
+  rules rename them to `np.all`/`np.prod`/`np.isin`, tests pass, and
+  observed behavior is unchanged. numpy 2.2.6 is the newest 2.x that
+  supports the Python 3.10 used here.
 
     python benchmark/run.py

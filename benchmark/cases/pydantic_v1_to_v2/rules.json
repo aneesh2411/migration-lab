@@ -1,13 +1,19 @@
 {
   "library": "pydantic",
   "from": "1.10.13",
-  "to": "2.*",
+  "to": "2.14.2",
   "guide_url": "https://docs.pydantic.dev/latest/migration/",
   "method_renames": {
     "dict": "model_dump",
     "json": "model_dump_json",
     "parse_obj": "model_validate"
   },
-  "expected_verdict": "behavior changed",
-  "notes": " distilled from the official migration guide: BaseModel.dict/json/parse_obj removed in v2"
+  "expected_verdict": "consistent evidence",
+  "notes": "exact pins both sides; rules distilled from the official migration guide (rule_evidence). The only snapshot difference is v2 model_dump_json dropping insignificant whitespace - cosmetic, reported but not a regression.",
+  "guide_retrieved": "2026-11-04",
+  "rule_evidence": {
+    "dict -> model_dump": "guide renamed-methods table: \"dict() model_dump()\" (BaseModel.dict removed in v2)",
+    "json -> model_dump_json": "guide renamed-methods table: \"json() model_dump_json()\"",
+    "parse_obj -> model_validate": "guide renamed-methods table: \"parse_obj() model_validate()\""
+  }
 }
