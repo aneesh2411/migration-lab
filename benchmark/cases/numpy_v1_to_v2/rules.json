@@ -1,0 +1,19 @@
+{
+  "library": "numpy",
+  "from": "1.26.4",
+  "to": "2.2.6",
+  "guide_url": "https://numpy.org/doc/stable/numpy_2_0_migration_guide.html",
+  "guide_retrieved": "2026-11-04",
+  "method_renames": {
+    "alltrue": "all",
+    "product": "prod",
+    "in1d": "isin"
+  },
+  "rule_evidence": {
+    "alltrue -> all": "guide expired-deprecations table: \"alltrue Use np.all instead.\" (removed in 2.0)",
+    "product -> prod": "guide expired-deprecations table: \"product Use np.prod instead.\" (removed in 2.0)",
+    "in1d -> isin": "guide deprecated-members table: \"in1d Use np.isin instead.\""
+  },
+  "expected_verdict": "consistent evidence",
+  "notes": "exact pins both sides; numpy 2.2.6 is the newest 2.x supporting Python 3.10 (2.5.x requires >=3.12). np.alltrue and np.product raise AttributeError on 2.x unpatched - real breakage the rules fix; values are unchanged, so the snapshot should match."
+}
