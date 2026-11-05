@@ -13,15 +13,40 @@ from __future__ import annotations
 import json
 
 
+def _json_equal(a, b) -> bool:
+    """Type-sensitive JSON equality.
+
+    Plain Python equality treats True == 1 and 1 == 1.0 as equal; a
+    serialized boolean becoming a number IS a behavior change. String
+    contents compare exactly - whitespace inside a JSON string value is
+    content, not formatting.
+    """
+    if type(a) is not type(b):
+        return False
+    if isinstance(a, dict):
+        return a.keys() == b.keys() and all(
+            _json_equal(a[k], b[k]) for k in a)
+    if isinstance(a, list):
+        return len(a) == len(b) and all(
+            _json_equal(x, y) for x, y in zip(a, b))
+    return a == b
+
+
 def _cosmetic(old: str, new: str) -> str | None:
     """Return why a differing line pair is harmless, else None."""
+    try:
+        jo, jn = json.loads(old), json.loads(new)
+    except (json.JSONDecodeError, ValueError):
+        pass  # not both JSON; try the plain-text formatting rule below
+    else:
+        # Both lines parse as JSON: only a type-sensitive value match is
+        # cosmetic. Never fall through to whitespace collapsing for
+        # JSON - it would erase real string-content changes.
+        if _json_equal(jo, jn):
+            return "same JSON value, different serialization formatting"
+        return None
     if old.split() == new.split():
         return "whitespace-only difference"
-    try:
-        if json.loads(old) == json.loads(new):
-            return "same JSON value, different serialization formatting"
-    except (json.JSONDecodeError, ValueError):
-        pass
     return None
 
 
@@ -32,10 +57,16 @@ def classify(old_snapshot: str, new_snapshot: str):
     differences explained by formatting; notes describe each), or
     'substantive' (at least one line pair differs in value).
     """
+    if old_snapshot == new_snapshot:
+        return "identical", []
     old_lines = old_snapshot.splitlines()
     new_lines = new_snapshot.splitlines()
     if old_lines == new_lines:
-        return "identical", []
+        # splitlines() erases trailing-newline and CRLF/LF differences;
+        # those are real byte changes a strict consumer can observe.
+        return "substantive", [
+            "snapshots differ only in bytes: line endings or trailing "
+            "newline changed"]
     if len(old_lines) != len(new_lines):
         return "substantive", [
             f"snapshot line count changed: {len(old_lines)} -> "
