@@ -1,0 +1,6 @@
+{
+  "expected_verdict": "no affected call sites",
+  "breaks_unpatched": false,
+  "output_contract": {},
+  "notes": "client uses only APIs untouched by 2.0 (mean, std, sum): the honest outcome is that there is nothing to migrate, and the tool must say so instead of inventing edits."
+}
