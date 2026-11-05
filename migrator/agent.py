@@ -2,9 +2,12 @@
 
 Verdicts, deliberately honest:
 - "consistent evidence": tests pass on the new version AND the behavior
-  snapshot matches the old version byte-for-byte. Evidence, not proof.
-- "behavior changed": tests pass but snapshot output differs - needs
-  human review; tests alone would have missed it.
+  snapshot shows no substantive difference from the old version.
+  Cosmetic serialization differences (e.g. insignificant JSON
+  whitespace) are reported separately, never as regressions. Evidence,
+  not proof.
+- "behavior changed": tests pass but snapshot output differs in value -
+  needs human review; tests alone would have missed it.
 - "escalate": anything unparsed, unpatched, or failing - the diff and
   the reason are handed to a human, nothing is applied silently.
 """
@@ -17,6 +20,7 @@ from .finder import find_usages
 from .guide import load_rules, parse_guide
 from .patcher import patch_file
 from .sandbox import run_in_sandbox
+from .snapdiff import classify
 
 
 def migrate(client: Path, lib_old: Path, lib_new: Path,
@@ -76,18 +80,25 @@ def migrate(client: Path, lib_old: Path, lib_new: Path,
         report["verdict"] = "escalate"
         report["reason"] = "patched code fails against the new version"
         return report
-    if migrated.snapshot != baseline.snapshot:
+    kind, notes = classify(baseline.snapshot, migrated.snapshot)
+    if kind == "substantive":
         report["verdict"] = "behavior changed"
         report["reason"] = ("unit tests pass on the new version, but the "
-                            "behavior snapshot differs from the old "
-                            "version - human review required")
+                            "behavior snapshot shows a substantive "
+                            "difference - human review required")
         report["snapshot_diff"] = "\n".join(difflib.unified_diff(
             baseline.snapshot.splitlines(), migrated.snapshot.splitlines(),
             fromfile="old-behavior", tofile="new-behavior", lineterm=""))
+        report["difference_notes"] = notes
         return report
     report["verdict"] = "consistent evidence"
     report["reason"] = ("tests pass on the new version and observed "
                         "behavior matches the old version; this is "
                         "evidence, not proof - hidden paths and API "
                         "edge cases still warrant review")
+    if kind == "cosmetic":
+        report["cosmetic_differences"] = notes
+        report["snapshot_diff"] = "\n".join(difflib.unified_diff(
+            baseline.snapshot.splitlines(), migrated.snapshot.splitlines(),
+            fromfile="old-behavior", tofile="new-behavior", lineterm=""))
     return report
