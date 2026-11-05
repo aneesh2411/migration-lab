@@ -64,32 +64,61 @@ what tests miss.
 
 ## Benchmark
 
-`benchmark/cases/` holds real-library upgrade cases. Each case pins
-exact published versions on both sides (installed from PyPI into
-throwaway venvs), a small client package written against the old API,
-rules distilled from the library's official migration guide (with the
-guide URL, retrieval date, and the quoted table row behind every rule
-recorded in `rules.json`), and the expected verdict.
+`benchmark/cases/` holds real-library upgrade cases. Each case splits
+inputs from expectations:
 
-Not every byte difference is a regression: the evaluator classifies
-snapshot differences as cosmetic (same JSON value with different
-serialization formatting, whitespace-only changes) or substantive
-(real value changes). Cosmetic differences are reported in the run
-report but still yield "consistent evidence"; only substantive
-differences escalate to "behavior changed - human review".
+- `rules.json` - what the planner sees: exact version pins on both
+  sides, the official migration-guide URL with retrieval date, the
+  quoted guide row behind every rule, and the rewrite rules.
+- `case.json` - what the evaluator checks: the expected verdict,
+  whether the unpatched client must break on the new version
+  (`breaks_unpatched`: the runner runs the unpatched client against
+  the new version first and flags the case if it passes - a case that
+  does not break proves nothing), the output contract, and notes.
+  `migrate()` never reads this file, so expectations cannot leak into
+  planning decisions.
+- `client/` - a small package written against the old API.
+
+Snapshot differences are classified as cosmetic (same JSON value with
+different serialization formatting, whitespace-only changes) or
+substantive (value changes). Cosmetic differences downgrade to
+"consistent evidence" ONLY when the case declares an output contract
+allowing it (`allow_serialization_formatting`) - e.g. consumers that
+parse the JSON. Formatting changes genuinely break byte-sensitive
+consumers (golden files, checksums, log parsers), so the default is
+strict and any observable difference escalates to human review.
 
 Current cases:
 
-- **pydantic 1.10.13 -> 2.14.2** - the rule engine applies the
-  `dict`/`json`/`parse_obj` renames from the official migration guide;
-  unit tests pass on v2, and the only snapshot difference is v2's
-  `model_dump_json` dropping insignificant whitespace, reported as a
-  cosmetic difference rather than a false alarm.
-- **numpy 1.26.4 -> 2.2.6** - `np.alltrue` and `np.product` were
-  removed in NumPy 2.0 (verified: both raise `AttributeError` on
-  2.2.6 unpatched), so this case breaks for real without a patch; the
-  rules rename them to `np.all`/`np.prod`/`np.isin`, tests pass, and
-  observed behavior is unchanged. numpy 2.2.6 is the newest 2.x that
-  supports the Python 3.10 used here.
+- **pydantic 1.10.13 -> 2.14.2** - renames from the official guide
+  (`dict`/`json`/`parse_obj`); tests pass on v2 and the only snapshot
+  difference is v2's `model_dump_json` dropping insignificant
+  whitespace, reported as cosmetic under an explicit output contract.
+- **numpy 1.26.4 -> 2.2.6** - `np.alltrue` and `np.product` raise
+  `AttributeError` on 2.2.6 (verified), so this case breaks for real
+  unpatched; the rules fix all call sites and behavior is unchanged.
+  numpy 2.2.6 is the newest 2.x supporting the Python 3.10 used here.
+- **numpy scalar promotion (1.26.4 -> 2.2.6)** - the NEP 50 change the
+  guide documents ("np.float32(3) + 3. now returns a float32"): the
+  unit test still passes (the value is 6.0 either way), but the
+  snapshot catches the dtype and scalar-repr change and escalates as
+  "behavior changed - human review". A substantive difference tests
+  alone would call green.
+- **numpy no-change (1.26.4 -> 2.2.6)** - a client using only
+  untouched APIs gets the honest "no affected call sites" verdict
+  instead of invented edits.
 
     python benchmark/run.py
+
+## Planners
+
+`migrator/planner.py` defines the planner interface. `RulePlanner` is
+the deterministic baseline used everywhere today. `ModelPlanner`
+accepts an injected model client (a plain `prompt -> text` callable)
+and validates every proposal strictly - malformed JSON, unknown keys,
+malformed names, and empty proposals are rejected and escalate rather
+than being applied; sandbox evaluation remains the authority on
+whether any proposal actually works. Tests replay recorded model
+responses from `tests/replays/`; there are no live model calls, no
+stored credentials, and no network in this repo - wiring a real model
+client is a separate, explicitly approved step.

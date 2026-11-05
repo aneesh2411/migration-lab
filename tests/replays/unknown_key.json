@@ -1,0 +1,2 @@
+{"response": "{\"method_renames\": {\"alltrue\": \"all\"}, \"explanation\": \"renamed in 2.0\"}",
+ "expect": "error"}

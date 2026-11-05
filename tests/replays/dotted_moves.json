@@ -1,0 +1,3 @@
+{"response": "{\"moves\": {\"textkit.title\": \"textkit.text.title\"}}",
+ "expect": "ok",
+ "moves": {"textkit.title": "textkit.text.title"}}

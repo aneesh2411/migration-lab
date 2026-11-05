@@ -1,0 +1,6 @@
+{
+  "expected_verdict": "behavior changed",
+  "breaks_unpatched": true,
+  "output_contract": {},
+  "notes": "np.alltrue is removed in 2.0 (breaks unpatched, rule fixes it), but the NEP 50 scalar-promotion change is semantic: float32 + python-float keeps float32 precision under 2.x instead of promoting to float64, and scalar reprs gained their type name. Tests pass (the value is still 6.0); the snapshot catches dtype and repr changes. No output contract declared, so this must escalate."
+}

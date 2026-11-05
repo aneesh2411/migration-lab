@@ -1,0 +1,6 @@
+{
+  "expected_verdict": "consistent evidence",
+  "breaks_unpatched": true,
+  "output_contract": {},
+  "notes": "np.alltrue and np.product raise AttributeError on 2.2.6 (verified in a clean venv)"
+}
