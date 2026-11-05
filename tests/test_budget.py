@@ -118,3 +118,27 @@ def test_concurrent_instances_lose_no_spend(tmp_path):
     one = Budget(tmp_path / "unit.json", ceiling,
                  PRICING).reserve("test-model", "x" * 60, 100).amount
     assert final == pytest.approx(100 * one)  # exactly 100 reservations
+
+
+def test_nonfinite_or_negative_state_fails_closed(tmp_path):
+    # independent review: {"reserved_usd": NaN} passed every ceiling
+    # comparison (all NaN comparisons are false) and allowed spending
+    # far past the ceiling
+    for state in ('{"reserved_usd": NaN}', '{"reserved_usd": Infinity}',
+                  '{"reserved_usd": -5}', '{"reserved_usd": "lots"}'):
+        (tmp_path / "budget.json").write_text(state)
+        b = make_budget(tmp_path)
+        with pytest.raises(BudgetExceeded):
+            b.reserve("test-model", "prompt", 10)
+
+
+def test_nonfinite_ceiling_rejected(tmp_path):
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(BudgetExceeded):
+            Budget(tmp_path / "b.json", bad, PRICING)
+
+
+def test_invalid_pricing_rejected(tmp_path):
+    bad = {"m": Pricing(float("nan"), 0.5, "byte-bpe")}
+    with pytest.raises(BudgetExceeded):
+        Budget(tmp_path / "b.json", 1.0, bad)
