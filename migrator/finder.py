@@ -1,7 +1,9 @@
 """Locate usages of migrated symbols in a client repo via AST.
 
-Import aliases are resolved (`import numpy as np` makes `np.float_`
-match a rule about `numpy.float_`). Reports imports of moved packages,
+Import aliases are resolved: `import numpy as np` makes `np.float_`
+match a rule about `numpy.float_`, and `from numpy import alltrue`
+makes a bare `alltrue(...)` match a rule about `numpy.alltrue`.
+Reports imports of moved packages,
 call sites and plain attribute references to moved symbols, method
 renames, and renamed keywords. Line/column data drives the patcher;
 nothing is edited here.
@@ -35,12 +37,24 @@ def _dotted(node) -> str | None:
 
 
 def _alias_map(tree) -> dict[str, str]:
-    """alias-or-name -> real top package, from plain import statements."""
+    """alias-or-name -> real dotted path.
+
+    Plain imports bind a module (`import numpy as np` -> np maps to
+    numpy); from-imports bind the imported symbol (`from numpy import
+    alltrue` -> alltrue maps to numpy.alltrue). Relative from-imports
+    are skipped: their package cannot be resolved from the statement
+    alone.
+    """
     out = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for a in node.names:
                 out[a.asname or a.name] = a.name
+        elif isinstance(node, ast.ImportFrom):
+            if node.level or not node.module:
+                continue
+            for a in node.names:
+                out[a.asname or a.name] = f"{node.module}.{a.name}"
     return out
 
 
@@ -68,6 +82,18 @@ def find_usages(repo: Path, rules) -> list[Usage]:
                         if id(node) not in seen_imports:
                             usages.append(Usage(path, a.name, "import",
                                                 node.lineno))
+                            seen_imports.add(id(node))
+            elif isinstance(node, ast.ImportFrom):
+                # from-imports of moved symbols must surface too: missing
+                # them produced false "no affected call sites" verdicts.
+                if node.level or not node.module:
+                    continue
+                for a in node.names:
+                    if f"{node.module}.{a.name}" in rules.moves:
+                        if id(node) not in seen_imports:
+                            usages.append(Usage(
+                                path, f"{node.module}.{a.name}", "import",
+                                node.lineno))
                             seen_imports.add(id(node))
             elif isinstance(node, ast.Call):
                 dotted = _dotted(node.func)
@@ -99,4 +125,14 @@ def find_usages(repo: Path, rules) -> list[Usage]:
                     if resolved in rules.moves:
                         usages.append(Usage(path, resolved, "attr_ref",
                                             node.lineno))
+            elif isinstance(node, ast.Name):
+                # bare reference to a from-imported moved symbol
+                # (e.g. `helper = alltrue`), not a call target
+                if id(node) in call_funcs:
+                    continue
+                resolved = aliases.get(node.id)
+                if resolved and resolved != node.id and \
+                        resolved in rules.moves:
+                    usages.append(Usage(path, resolved, "attr_ref",
+                                        node.lineno))
     return usages

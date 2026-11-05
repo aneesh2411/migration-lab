@@ -32,6 +32,8 @@ in settle() once a live client exists.
 """
 from __future__ import annotations
 
+import math
+
 import fcntl
 import json
 import os
@@ -84,8 +86,17 @@ class Budget:
 
     def __init__(self, path, ceiling_usd: float,
                  pricing: dict[str, Pricing]):
-        if ceiling_usd is None or ceiling_usd <= 0:
-            raise BudgetExceeded("no positive ceiling configured")
+        if (ceiling_usd is None
+                or not math.isfinite(float(ceiling_usd))
+                or float(ceiling_usd) <= 0):
+            raise BudgetExceeded("no positive finite ceiling configured")
+        for model, price in pricing.items():
+            if not (math.isfinite(price.input_per_mtok)
+                    and math.isfinite(price.output_per_mtok)
+                    and price.input_per_mtok >= 0
+                    and price.output_per_mtok >= 0):
+                raise BudgetExceeded(
+                    f"invalid pricing for model {model!r}")
         self.path = str(path)
         self.lock_path = self.path + ".lock"
         self.ceiling = float(ceiling_usd)
@@ -95,11 +106,20 @@ class Budget:
     def _load(self) -> float:
         try:
             with open(self.path) as f:
-                return float(json.load(f)["reserved_usd"])
+                value = json.load(f)["reserved_usd"]
         except FileNotFoundError:
             return 0.0
-        except (json.JSONDecodeError, KeyError, ValueError):
+        except (json.JSONDecodeError, KeyError):
             return self.ceiling  # fail closed
+        # Python's json accepts NaN/Infinity literals; a non-finite or
+        # negative persisted amount makes every ceiling comparison
+        # meaningless (NaN comparisons are all false), silently
+        # bypassing the budget. Treat it as corrupt: fail closed.
+        if (isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value) or value < 0):
+            return self.ceiling  # fail closed
+        return float(value)
 
     def _store(self, reserved: float) -> None:
         tmp = self.path + ".tmp"

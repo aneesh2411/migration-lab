@@ -11,7 +11,7 @@ import pytest
 
 from migrator.guide import Rules
 from migrator.planner import (MigrationContext, ModelPlanner, PlannerError,
-                              RulePlanner)
+                              RulePlanner, validate_proposal)
 
 CTX = MigrationContext(library="numpy", from_version="1.26.4",
                        to_version="2.2.6",
@@ -51,3 +51,14 @@ def test_model_planner_replays(replay):
     else:
         with pytest.raises(PlannerError):
             planner.propose(CTX)
+
+
+def test_non_dict_sections_rejected_not_crash():
+    # independent review: {"moves": ["bad"]} raised an uncaught
+    # AttributeError (.items on a list), bypassing revision/escalation
+    with pytest.raises(PlannerError):
+        validate_proposal('{"moves": ["bad"]}')
+    with pytest.raises(PlannerError):
+        validate_proposal('{"method_renames": 3}')
+    with pytest.raises(PlannerError):
+        validate_proposal('{"kwarg_renames": "old -> new"}')

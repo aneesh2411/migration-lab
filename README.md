@@ -55,8 +55,13 @@ what tests miss.
 
 ## Deliberate limits (current scope)
 
-- Python clients only; import/attribute call patterns, no aliased
-  imports or dynamic dispatch (those escalate).
+- Python clients only; plain imports, `as` aliases and from-imports
+  are resolved; dynamic dispatch and relative from-imports are not
+  (those escalate or are left unedited so evaluation fails honestly).
+  A from-import whose symbol moves to a different MODULE
+  (`from textkit import slugify` where slugify is now in
+  textkit.text) is not rewritten yet - the import is left unedited
+  and the evaluation failure escalates.
 - Guides are parsed in a narrow declared format; real-world release
   notes need the LLM planner that is intentionally not wired in yet.
 - Sandboxing is local subprocess + venv isolation, not a hardened
@@ -79,9 +84,13 @@ inputs from expectations:
   planning decisions.
 - `client/` - a small package written against the old API.
 
-Snapshot differences are classified as cosmetic (same JSON value with
-different serialization formatting, whitespace-only changes) or
-substantive (value changes). Cosmetic differences downgrade to
+Snapshot differences are classified as cosmetic or substantive.
+Cosmetic means only: both lines parse as JSON and their values compare
+equal under type-sensitive equality (a serialized boolean becoming a
+number, or whitespace inside a JSON string value, is substantive - it
+is content, not formatting), or a plain-text line pair differs only in
+whitespace. Byte-level differences the line comparison would erase
+(trailing newline, CRLF vs LF) are substantive. Cosmetic differences downgrade to
 "consistent evidence" ONLY when the case declares an output contract
 allowing it (`allow_serialization_formatting`) - e.g. consumers that
 parse the JSON. Formatting changes genuinely break byte-sensitive

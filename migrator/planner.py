@@ -81,6 +81,14 @@ def validate_proposal(raw: str) -> Rules:
     unknown = set(data) - _KNOWN_KEYS
     if unknown:
         raise PlannerError(f"proposal has unknown keys: {sorted(unknown)}")
+    for key in _KNOWN_KEYS:
+        section = data.get(key)
+        if section is not None and not isinstance(section, dict):
+            # e.g. {"moves": ["bad"]} - .items() would raise an
+            # uncaught AttributeError and crash the migration instead
+            # of feeding a rejection back into revision
+            raise PlannerError(
+                f"proposal section {key!r} is not an object")
     rules = Rules()
     for old, new in (data.get("moves") or {}).items():
         if not (_NAME_RE.match(str(old)) and _NAME_RE.match(str(new))
