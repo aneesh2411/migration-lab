@@ -24,8 +24,18 @@ from .snapdiff import classify
 
 
 def migrate(client: Path, lib_old: Path, lib_new: Path,
-            guide: Path) -> dict:
+            guide: Path, output_contract: dict | None = None) -> dict:
+    """output_contract declares what the client's output consumers
+    tolerate. {"allow_serialization_formatting": True} means consumers
+    parse structured output, so cosmetically-reformatted-but-equal
+    values are acceptable. Default is strict: any observable
+    difference escalates, because byte-level changes (JSON whitespace,
+    scalar reprs) genuinely break byte-sensitive consumers such as
+    golden files, checksums, and log parsers.
+    """
     report: dict = {"client": str(client), "guide": str(guide)}
+    allow_fmt = bool((output_contract or {})
+                     .get("allow_serialization_formatting"))
 
     baseline = run_in_sandbox(client, lib_old)
     report["baseline"] = {"tests_passed": baseline.tests_passed,
@@ -96,9 +106,24 @@ def migrate(client: Path, lib_old: Path, lib_new: Path,
                         "behavior matches the old version; this is "
                         "evidence, not proof - hidden paths and API "
                         "edge cases still warrant review")
-    if kind == "cosmetic":
+    if kind == "cosmetic" and allow_fmt:
         report["cosmetic_differences"] = notes
         report["snapshot_diff"] = "\n".join(difflib.unified_diff(
             baseline.snapshot.splitlines(), migrated.snapshot.splitlines(),
             fromfile="old-behavior", tofile="new-behavior", lineterm=""))
+        return report
+    if kind == "cosmetic":
+        report["verdict"] = "behavior changed"
+        report["reason"] = ("unit tests pass on the new version; the "
+                            "snapshot differences look like serialization "
+                            "formatting, but this case declares no output "
+                            "contract allowing that - byte-sensitive "
+                            "consumers (golden files, checksums, log "
+                            "parsers) can break on exactly these changes, "
+                            "so a human must confirm before accepting")
+        report["cosmetic_differences"] = notes
+        report["snapshot_diff"] = "\n".join(difflib.unified_diff(
+            baseline.snapshot.splitlines(), migrated.snapshot.splitlines(),
+            fromfile="old-behavior", tofile="new-behavior", lineterm=""))
+        return report
     return report
