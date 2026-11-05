@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+fixtures/textkit_v*/
+fixtures/client_app/
+fixtures/guides/
