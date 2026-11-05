@@ -14,7 +14,7 @@ import difflib
 from pathlib import Path
 
 from .finder import find_usages
-from .guide import parse_guide
+from .guide import load_rules, parse_guide
 from .patcher import patch_file
 from .sandbox import run_in_sandbox
 
@@ -32,8 +32,10 @@ def migrate(client: Path, lib_old: Path, lib_new: Path,
                             "migrate a healthy tree, not a broken one")
         return report
 
-    rules = parse_guide(guide)
+    rules = (load_rules(guide) if str(guide).endswith(".json")
+             else parse_guide(guide))
     report["rules"] = {"moves": rules.moves,
+                       "method_renames": rules.method_renames,
                        "kwarg_renames": {f"{f}({o})": n
                                          for (f, o), n in
                                          rules.kwarg_renames.items()},
