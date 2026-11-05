@@ -61,3 +61,19 @@ what tests miss.
   notes need the LLM planner that is intentionally not wired in yet.
 - Sandboxing is local subprocess + venv isolation, not a hardened
   container; untrusted repos would need stronger isolation.
+
+## Benchmark
+
+`benchmark/cases/` holds real-library upgrade cases: each pins actual
+published versions (installed from PyPI into throwaway venvs), a small
+client package written against the old API, rules distilled from the
+library's official migration guide, and the expected verdict. The
+first case, pydantic v1 -> v2, shows the evaluator working on a real
+library: the rule engine applies the `dict`/`json`/`parse_obj`
+renames, the client's unit tests pass on v2 - and the behavior
+snapshot still catches that v2's `model_dump_json` drops insignificant
+whitespace, so the run ends in "behavior changed - human review"
+rather than a false green. That is the intended demonstration:
+verification beyond tests.
+
+    python benchmark/run.py
