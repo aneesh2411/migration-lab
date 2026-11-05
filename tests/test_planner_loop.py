@@ -67,18 +67,26 @@ def test_bounded_attempts_escalate_with_history():
 
 def test_budget_exhaustion_stops_loop_fail_closed(tmp_path):
     client, state = scripted([BAD, GOOD])
-    # ceiling sized from the actual first-call reservation: enough for
-    # one call at worst case, not two
-    probe = Budget(tmp_path / "probe.json", 10.0,
-                   {"test-model": Pricing(0.10, 0.50, "byte-bpe")})
+    # ceiling between the first and second call's reservations, derived
+    # the same way migrate() builds its context - environment-independent
     from migrator.planner import MigrationContext
+    lib_old, lib_new = FIX / "textkit_v1", FIX / "textkit_v2"
     ctx_sources = {str(p.relative_to(FIX / "client_app")): p.read_text()
                    for p in sorted((FIX / "client_app").rglob("*.py"))}
-    ctx = MigrationContext("textkit", "1", "2", GUIDE.read_text(), [],
-                           ctx_sources)
-    first_prompt = ModelPlanner(lambda p: GOOD)._prompt(ctx)
-    r0 = probe.reserve("test-model", first_prompt, 2000)
-    budget = Budget(tmp_path / "b.json", r0.amount * 1.05,
+    ctx = MigrationContext(
+        library=str(lib_old).split("==")[0],
+        from_version=str(lib_old).split("==")[-1],
+        to_version=str(lib_new).split("==")[-1],
+        guide_text=GUIDE.read_text(), usages=[],
+        client_sources=ctx_sources)
+    probe = Budget(tmp_path / "probe.json", 10.0,
+                   {"test-model": Pricing(0.10, 0.50, "byte-bpe")})
+    planner_probe = ModelPlanner(lambda p: GOOD)
+    r1 = probe.reserve("test-model", planner_probe._prompt(ctx), 2000)
+    r2 = probe.reserve("test-model",
+                       planner_probe._prompt(ctx, ["some failure"]),
+                       2000)
+    budget = Budget(tmp_path / "b.json", (r1.amount + r2.amount) / 2,
                     {"test-model": Pricing(0.10, 0.50, "byte-bpe")})
     paid = BudgetedClient(client, budget, "test-model", 2000)
     r = migrate(FIX / "client_app", FIX / "textkit_v1",
